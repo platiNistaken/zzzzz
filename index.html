@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sürpriz</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --btnYes:#ff5a8f;
+    --btnNo:#4a4a4a;
+    --text:#111;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:Inter, "Segoe UI", Tahoma, sans-serif; background:var(--bg); color:var(--text)}
+  /* Kutu: butonları ortala */
+  .stage{
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    position:relative;
+    background: linear-gradient(180deg,#fffafc,#fff0f3);
+  }
+
+  /* container: iki buton */
+  #container{
+    display:flex;
+    gap:36px; /* butonlar arası simetrik boşluk */
+    align-items:center;
+    justify-content:center;
+    transition:transform .4s ease;
+    z-index:5;
+  }
+
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:12px;
+    padding:18px 44px;
+    font-size:1.25rem;
+    font-weight:700;
+    color:white;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+    transition:transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .25s;
+    transform-origin:center center;
+    will-change:transform;
+  }
+
+  button:active{transform:scale(.98)}
+  #yes{
+    background: linear-gradient(180deg,var(--btnYes), #e5447b);
+    width:170px;
+    height:60px;
+  }
+  #no{
+    background:var(--btnNo);
+    width:170px;
+    height:60px;
+  }
+
+  /* Eğer yes butonu full-screen moduna geçerse (buton ekranı kaplar gibi) */
+  .yes-full {
+    position:fixed;
+    top:0; left:0;
+    width:100vw !important;
+    height:100vh !important;
+    border-radius:0 !important;
+    padding:0 !important;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:2.2rem !important;
+    z-index:6;
+    box-shadow:none !important;
+    transform:none !important;
+  }
+
+  /* Final overlay (mesaj + GIF + kalpler) */
+  #finalOverlay {
+    position:fixed;
+    inset:0;
+    background: linear-gradient(180deg,#fff7fb,#ffe6f0);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:18px;
+    padding:30px;
+    text-align:center;
+    z-index:50;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .45s ease;
+  }
+  #finalOverlay.show { opacity:1; pointer-events:auto; }
+  #finalOverlay h1 { margin:0; color:#b30f5b; font-size:2.4rem; }
+  #finalOverlay p { margin:0; font-size:1.1rem; color:#4b2240; }
+
+  /* Stitch GIF */
+  .stitch {
+    width:220px;
+    height:auto;
+    border-radius:12px;
+    box-shadow:0 14px 40px rgba(179,15,91,0.15);
+    transform-origin:center bottom;
+    animation: floaty 2.5s ease-in-out infinite;
+  }
+  @keyframes floaty {
+    0%{transform:translateY(0)}
+    50%{transform:translateY(-14px)}
+    100%{transform:translateY(0)}
+  }
+
+  /* Kalp patlaması (confetti hearts) */
+  .heart {
+    position:absolute;
+    width:18px; height:18px;
+    background:#ff6fa1;
+    transform:rotate(-45deg);
+    border-radius:4px 4px 0 0;
+    opacity:0;
+    left:50%; top:50%;
+    pointer-events:none;
+  }
+  .heart:before, .heart:after{
+    content:"";
+    position:absolute;
+    width:18px; height:18px;
+    background:#ff6fa1;
+    border-radius:50%;
+    top:-9px; left:0;
+  }
+  .heart:after{left:9px; top:0}
+  /* küçük helper */
+  .hidden{ display:none !important; }
+
+  /* responsive */
+  @media (max-width:520px){
+    button{ padding:14px 22px; font-size:1rem; width:130px; height:50px }
+    .stitch{ width:160px }
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div id="container">
+    <button id="yes">Evet</button>
+    <button id="no">Hayır</button>
+  </div>
+
+  <!-- final overlay -->
+  <div id="finalOverlay" aria-hidden="true">
+    <h1>Seni çok seviyorum 💖</h1>
+    <p>Hayatımda olduğun için çok şanslıyım.</p>
+    <!-- stitch gif: dilediğin link ile değiştir -->
+    <img class="stitch" src="https://media.giphy.com/media/5t9IcJ3bEv6s0/giphy.gif" alt="Stitch kalpler">
+  </div>
+
+  <!-- heart particles oluşturmak için container -->
+  <div id="particles" aria-hidden="true"></div>
+</div>
+
+<script>
+/* Mantık:
+ - her 'Hayır' tıklamasında yesScale *= 2 olacak (başlangıç 1).
+ - transform: scale(...) ile görsel büyütme.
+ - ekranı kapsadığını tespit etmek için yes butonun bounding box'unu scale ile ölç ve
+   genişlik veya yükseklik viewport'un çoğunu kapladıysa "full" moduna geçir.
+ - full moda geçince yes butonunu fixed, full-screen yap; sonra Evet'e tıklayınca finalOverlay aç.
+*/
+
+const yes = document.getElementById('yes');
+const no = document.getElementById('no');
+const container = document.getElementById('container');
+const finalOverlay = document.getElementById('finalOverlay');
+const particles = document.getElementById('particles');
+
+let scale = 1;
+let isFull = false;
+
+function updateYesTransform(){
+  yes.style.transform = `scale(${scale})`;
+  // gölgeleme / z-index gerektiğinde
+  if(scale > 1.1) yes.style.boxShadow = '0 20px 50px rgba(0,0,0,0.18)';
+  else yes.style.boxShadow = '';
+  checkIfCovers();
+}
+
+function checkIfCovers(){
+  // ölçüm: scaled bounding rect
+  const rect = yes.getBoundingClientRect();
+  const scaledWidth = rect.width * scale;
+  const scaledHeight = rect.height * scale;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // eğer scaled boyut viewport'un %90'ından büyükse full moda geçir
+  if((scaledWidth >= vw*0.9 || scaledHeight >= vh*0.9) && !isFull){
+    makeYesFull();
+  }
+}
+
+function makeYesFull(){
+  isFull = true;
+  // butonu full-screen gösterecek şekilde düzenle
+  // önce transform'ı sıfırla, sonra class ekle
+  yes.style.transition = 'all .45s cubic-bezier(.2,.9,.2,1)';
+  // ufak gecikme ile class ekle
+  setTimeout(()=>{
+    yes.classList.add('yes-full');
+    // butonun iç metnini koru
+    yes.textContent = 'Evet';
+  }, 120);
+  // container'i gizleyebiliriz (no buton'u ortadan kaldır)
+  setTimeout(()=> {
+    no.style.visibility = 'hidden';
+    container.style.gap = '0';
+  }, 260);
+}
+
+no.addEventListener('click', ()=>{
+  if(isFull) return; // full olunca daha fazla büyütme yok
+  // her tıklamada iki kat
+  scale = scale * 2;
+  // sınır koy: çok büyük olmaması için maksimum 40
+  if(scale > 40) scale = 40;
+  updateYesTransform();
+});
+
+yes.addEventListener('click', (e)=>{
+  if(!isFull){
+    // eğer daha full değilse, küçük bir geribildirim ver
+    yes.animate([{transform:'scale(1.05)'},{transform:'scale(1)'}], {duration:220, easing:'ease-out'});
+    return;
+  }
+  // finali göster
+  finalOverlay.classList.add('show');
+  finalOverlay.setAttribute('aria-hidden','false');
+  // kalp / konfeti efektleri başlat
+  burstHearts(18);
+});
+
+/* Kalp patlaması fonksiyonu */
+function burstHearts(count){
+  for(let i=0;i<count;i++){
+    createHeart(i);
+  }
+}
+
+function rand(min,max){ return Math.random()*(max-min)+min; }
+
+function createHeart(i){
+  const h = document.createElement('div');
+  h.className = 'heart';
+  particles.appendChild(h);
+
+  // başlangıç pozisyon (ortaya yakın)
+  const startX = window.innerWidth/2 + rand(-40,40);
+  const startY = window.innerHeight/2 + rand(-20,20);
+  h.style.left = startX + 'px';
+  h.style.top = startY + 'px';
+
+  // hedefe doğru rastgele fırlatma
+  const angle = rand(-Math.PI, Math.PI);
+  const dist = rand(120, 380);
+  const targetX = startX + Math.cos(angle)*dist;
+  const targetY = startY + Math.sin(angle)*dist - rand(30,200);
+
+  // animasyon
+  const dur = rand(900,1600);
+  h.animate([
+    { transform: 'translate3d(0,0,0) scale(0.8)', opacity:0 },
+    { transform: `translate3d(${targetX-startX}px, ${targetY-startY}px, 0) scale(1.05)`, opacity:1, offset:0.6 },
+    { transform: `translate3d(${targetX-startX}px, ${targetY-startY}px, 0) scale(0.9)`, opacity:0 }
+  ], {
+    duration: dur,
+    easing: 'cubic-bezier(.2,.9,.2,1)'
+  });
+
+  // temizle
+  setTimeout(()=> h.remove(), dur+60);
+}
+
+/* pencere yeniden boyutlandığında kontrol et */
+window.addEventListener('resize', ()=>{
+  if(!isFull) checkIfCovers();
+});
+</script>
+
+</body>
+</html>
