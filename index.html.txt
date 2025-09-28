@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Sürpriz</title>
+<style>
+  :root{
+    --bg:#ffffff;
+    --btnYes:#ff5a8f;
+    --btnNo:#4a4a4a;
+    --text:#111;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:Inter, "Segoe UI", Tahoma, sans-serif; background:var(--bg); color:var(--text)}
+  .stage{
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    position:relative;
+    background: linear-gradient(180deg,#fffafc,#fff0f3);
+    flex-direction:column;
+    text-align:center;
+  }
+
+  .question {
+    color:#111;
+    font-size:1.5rem;
+    margin-bottom:16px;
+  }
+
+  #container{
+    display:flex;
+    gap:36px;
+    align-items:center;
+    justify-content:center;
+    transition:transform .4s ease;
+    z-index:5;
+    position:relative;
+  }
+
+  button{
+    cursor:pointer;
+    border:none;
+    border-radius:12px;
+    padding:18px 44px;
+    font-size:1.25rem;
+    font-weight:700;
+    color:white;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+    transition:transform .35s cubic-bezier(.2,.9,.2,1), box-shadow .25s;
+    transform-origin:center center;
+    will-change:transform;
+  }
+  button:active{transform:scale(.98)}
+
+  #yes{
+    background: linear-gradient(180deg,var(--btnYes), #e5447b);
+    width:170px;
+    height:60px;
+  }
+  #no{
+    background:var(--btnNo);
+    width:170px;
+    height:60px;
+  }
+
+  #finalOverlay {
+    position:fixed;
+    inset:0;
+    background: linear-gradient(180deg,#fff7fb,#ffe6f0);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:18px;
+    padding:30px;
+    text-align:center;
+    z-index:50;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .45s ease;
+  }
+  #finalOverlay.show { opacity:1; pointer-events:auto; }
+  #finalOverlay h1 { margin:0; color:#b30f5b; font-size:2.4rem; animation: heartbeat 1s infinite; }
+  #finalOverlay p { margin:0; font-size:1.1rem; color:#4b2240; }
+
+  .stitch {
+    width:220px;
+    height:auto;
+    border-radius:12px;
+    box-shadow:0 14px 40px rgba(179,15,91,0.15);
+    transform-origin:center bottom;
+    animation: floaty 2.5s ease-in-out infinite;
+  }
+  @keyframes floaty {0%{transform:translateY(0)}50%{transform:translateY(-14px)}100%{transform:translateY(0)}}
+
+  .heart {
+    position:absolute;
+    width:18px; height:18px;
+    background:#ff6fa1;
+    transform:rotate(-45deg);
+    border-radius:4px 4px 0 0;
+    opacity:0;
+    left:50%; top:50%;
+    pointer-events:none;
+  }
+  .heart:before, .heart:after{
+    content:"";
+    position:absolute;
+    width:18px; height:18px;
+    background:#ff6fa1;
+    border-radius:50%;
+    top:-9px; left:0;
+  }
+  .heart:after{left:9px; top:0}
+
+  @keyframes heartbeat {
+    0%,100%{transform:scale(1)}
+    25%{transform:scale(1.1)}
+    50%{transform:scale(0.95)}
+    75%{transform:scale(1.05)}
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <div class="question">Beni affeder misin?</div>
+  <div id="container">
+    <button id="yes">Evet</button>
+    <button id="no">Hayır</button>
+  </div>
+
+  <div id="finalOverlay" aria-hidden="true">
+    <h1>Seni çok seviyorum 💖</h1>
+    <p>Hayatımda olduğun için çok şanslıyım.</p>
+    <img class="stitch" src="https://media.giphy.com/media/5t9IcJ3bEv6s0/giphy.gif" alt="Stitch kalpler">
+  </div>
+  <div id="particles" aria-hidden="true"></div>
+</div>
+
+<script>
+const yes = document.getElementById('yes');
+const no = document.getElementById('no');
+const finalOverlay = document.getElementById('finalOverlay');
+const particles = document.getElementById('particles');
+
+let isShown = false;
+let yesScale = 1;
+
+// Evet butonuna basıldığında final mesaj
+yes.addEventListener('click', ()=>{
+  if(isShown) return;
+  isShown = true;
+  finalOverlay.classList.add('show');
+  finalOverlay.setAttribute('aria-hidden','false');
+  burstHearts(18);
+});
+
+// Hayır butonuna basıldıkça evet butonunu büyüt
+no.addEventListener('click', ()=>{
+  yesScale *= 1.2; // her tıklamada %20 büyüsün
+  yes.style.transform = `scale(${yesScale})`;
+});
+
+// Hayır butonunun evet butonunun altında veya üstünde kalmaması
+function positionNoButton(){
+  const yesRect = yes.getBoundingClientRect();
+  let x = Math.random() * (window.innerWidth - no.offsetWidth);
+  let y = Math.random() * (window.innerHeight - no.offsetHeight);
+  if(y < yesRect.top + yesRect.height && y + no.offsetHeight > yesRect.top){
+    y = yesRect.bottom + 20;
+    if(y + no.offsetHeight > window.innerHeight) y = yesRect.top - no.offsetHeight - 20;
+  }
+  no.style.position='fixed';
+  no.style.left = x+'px';
+  no.style.top = y+'px';
+}
+positionNoButton();
+
+function burstHearts(count){for(let i=0;i<count;i++){createHeart(i);}}
+function rand(min,max){return Math.random()*(max-min)+min;}
+function createHeart(i){
+  const h=document.createElement('div');
+  h.className='heart';
+  particles.appendChild(h);
+  const startX=window.innerWidth/2+rand(-40,40);
+  const startY=window.innerHeight/2+rand(-20,20);
+  h.style.left=startX+'px';
+  h.style.top=startY+'px';
+  const angle=rand(-Math.PI,Math.PI);
+  const dist=rand(120,380);
+  const targetX=startX+Math.cos(angle)*dist;
+  const targetY=startY+Math.sin(angle)*dist-rand(30,200);
+  const dur=rand(900,1600);
+  h.animate([
+    { transform: 'translate3d(0,0,0) scale(0.8)', opacity:0 },
+    { transform: `translate3d(${targetX-startX}px, ${targetY-startY}px, 0) scale(1.05)`, opacity:1, offset:0.6 },
+    { transform: `translate3d(${targetX-startX}px, ${targetY-startY}px, 0) scale(0.9)`, opacity:0 }
+  ],{duration:dur,easing:'cubic-bezier(.2,.9,.2,1)'});
+  setTimeout(()=>h.remove(),dur+60);
+}
+
+</script>
+
+</body>
+</html>
